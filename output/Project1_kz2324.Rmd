@@ -1,0 +1,195 @@
+---
+title: "Project 1 Hiphop & Pop"
+author: "Kaiyan Zheng (kz2324)"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning=FALSE,message = FALSE)
+```
+
+In general, though Hip-hop has become known to wider public in China these years. Compared with mainstream music like Pop music, Hip-hop is still in the underground state. However, in western countries, though it seems that hip-hop is very popular. The acceptance is still not be comparable with mainstream music. With the enthusiasm of Hip-hop music, in this project, I would dive into Hip-hop and Pop music to find if there are any difference and similarity.
+
+The dataset would be used:
+
+"lyrics.csv" is a filtered corpus of 380,000+ song lyrics from from MetroLyrics. You can read more about it on [Kaggle](https://www.kaggle.com/gyani95/380000-lyrics-from-metrolyrics).
+
+"artists.csv" provides the background information of all the artistis. These information are scraped from [LyricsFreak](https://www.lyricsfreak.com/).
+
+### Step 0 - Load all the required libraries
+
+```{r load libraries, warning=FALSE, message=FALSE}
+library(tm)
+library(data.table)
+library(tidytext)
+library(textdata)
+library(tidyverse)
+library(DT)
+library(plotly)
+library(scales)
+library(wordcloud2)
+library(gridExtra)
+library(ngram)
+library(RColorBrewer)
+library(stringr)
+library(reshape2)
+library(wordcloud)
+```
+
+### Step 1 - Load processed data
+
+```{r}
+lyrics <- get(load('../output/processed_lyrics.RData'))
+artistis <- read.csv('../data/artists.csv', header = T, stringsAsFactors = F)
+```
+
+To get general idea, let's take a look at the genre distribution among all lyrics. It's surprised that Rock music accounts for a very large proportion. However, the good news is that the amount of Hip-hop music and Pop music didn't hold a huge gap and it could do help for the further analysis.
+```{r}
+ggplot(lyrics, aes(fct_rev(fct_infreq(genre)))) + 
+  geom_histogram(colour="black",fill="white", stat = "count") +
+  xlab("Genre")  + ggtitle("Genre distribution among all lyrics") +
+  theme(plot.title = element_text(face = "bold", hjust = 0.5),axis.text.x = element_text(size = 6)) 
+```
+
+There are 18697 records for Pop and 8905 records for Hip-hop, if the gross number of records is not equal, the word frequency analysis and also sentiment analysis would be affected, so I choose to random sample the dataset for pop to make sure they have the same gross number of records.
+```{r}
+pop <- lyrics[lyrics$genre == "Pop",]
+nrow(pop)
+hiphop <- lyrics[lyrics$genre == "Hip-Hop",]
+nrow(hiphop)
+
+pop <- pop[sample(nrow(pop), 8905), ]
+nrow(pop)
+```
+
+### Step 2 - Word Frequency Analysis
+
+To get the most straight forward impression, wordcloud is used to show the result of word frequency analysis.
+Below are the wordcloud of the lyrics and the wordcloud of the origins of the relevant artists.
+
+As we could see here, compared with pop music, the lyrics of hip-hop music contains more strong words to express anger or sadness. However, the word "love" is the most frequent word in both kinds of music. We would explore more of these words in sentiment analysis.
+
+In China, a kind of standard of classification for hip-hop music is where these hip hopers born and live. Like Changsha, Xinjiang, Shanghai, Chongqing are several popular cities where hip hopers live. So, I'm curious about what cities are popular for hip hopers in west and how about the pop music. Thus, there are two wordclouds showing the cities those artists origin. The result is very apparent, Los Angeles is a quite popular city in both hip-hop and pop music. However, for pop music, London occupies the largest parts.
+ 
+```{r}
+hiphop_words <- unlist(str_split(hiphop$stemmedwords, " "))
+hiphop_words_df <- data.frame(rev(sort(table(hiphop_words))))
+hiphop_words_df <- subset(hiphop_words_df, hiphop_words_df$Freq >= 500)
+```
+
+```{r}
+wordcloud2(data=hiphop_words_df, color='random-light', backgroundColor="black")
+```
+
+```{r}
+hiphoper_name <- unique(hiphop$artist)
+hiphoper <- artistis[which(artistis$Artist %in% hiphoper_name), ]
+hiphoper_origin <- str_split(hiphoper$Origin[hiphoper$Origin != ""], ", ")
+hiphoper_city <- c()
+for (i in 1 : length(hiphoper_origin)) hiphoper_city[i] <- hiphoper_origin[[i]][1]
+hiphoper_city  <- data.frame(rev(sort(table(hiphoper_city))))
+wordcloud2(data=hiphoper_city , color='random-light', backgroundColor="black")
+```
+
+```{r}
+pop_words <- unlist(str_split(pop$stemmedwords, " "))
+pop_words_df <- data.frame(rev(sort(table(pop_words))))
+pop_words_df <- subset(pop_words_df, pop_words_df$Freq >= 500)
+```
+
+```{r}
+wordcloud2(data=pop_words_df, color='random-dark', backgroundColor="white")
+```
+
+```{r}
+poper_name <- unique(pop$artist)
+poper <- artistis[which(artistis$Artist %in% poper_name), ]
+poper_origin <- str_split(poper$Origin[poper$Origin != ""], ", ")
+poper_city <- c()
+for (i in 1 : length(poper_origin)) poper_city[i] <- poper_origin[[i]][1]
+poper_city  <- data.frame(rev(sort(table(poper_city))))
+wordcloud2(data=poper_city , color='random-dark', backgroundColor="white")
+```
+
+### Step 3: Semtiment Analysis
+After word frequency analysis, I'd like to learn more behind those word. This is quite easy to conduct in R as there are many packages in R for sentiment analysis. I leant a lot from this website: https://www.tidytextmining.com/sentiment.html which introduces text mining with R. 
+
+The dictionary I used is `bing` because it can give us very straightforward classification for wards: positive and negative. After quick preprocessing of words. I made inner join of the words and words and relevant sentiments in `bing`. Thus, the words which have labels of positive or negative in the lyrics are extracted. There are histograms for Top 10 Positive/Negative Words and comparison cloud for these words shown below for both hip-hop music and pop music.
+
+The previous thought is verified here. As the histogram shows, in average, there are more negative words than positive words. Within negative words, there are also more dirty words. However, in pop music, there are much fewer negative words. Among negative words, no dirty words appear. It seems that those negative words in pop music more tend to express the lost and hurt in life. While in hip-hop music, those negative words are shown the anger directly by dirty words. In addition, I feel good that "love" is the most frequent word in both music. 
+
+We could get some idea about the difference between hip-hop music and pop music. We should appreciate that we live in the time that the world is filled with diversity. Though pop music is the mainstream thread, there's still room for hip-hop music. And people could choose to listen all kinds of music they want.
+
+```{r}
+text <- c(hiphop$stemmedwords)
+text_df <- tibble(text = text)
+hiphop_word_df <- text_df %>% unnest_tokens(word, text)
+hiphop_word_counts <- hiphop_word_df %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+```
+
+```{r}
+hiphop_word_counts %>%
+  group_by(sentiment) %>%
+  top_n(10) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) +
+  coord_flip() + 
+  ggtitle("Top 10 Positive/Negative Words in Hiphop music") + 
+  xlab("Word") + ylab("Count") +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") + 
+  scale_fill_manual(values=c("#0a0961","#ea6205"))+
+  scale_color_manual(values=c("#ea6205", "#0a0961")) + 
+  theme(plot.title = element_text(face = "bold", hjust = 0.5)) 
+```
+
+
+```{r}
+hiphop_word_df %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(max.words = 300, title.colors=c("#0a0961","#ea6205"),title.bg.colors=c("white","white"),  match.colors=TRUE)
+```
+
+
+```{r}
+text <- c(pop$stemmedwords)
+text_df <- tibble(text = text)
+pop_word_df <- text_df %>% unnest_tokens(word, text)
+pop_word_counts <- pop_word_df %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  ungroup()
+```
+
+```{r}
+pop_word_counts %>%
+  group_by(sentiment) %>%
+  top_n(10) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(word, n, fill = sentiment)) +
+  coord_flip() + 
+  ggtitle("Top 10 Positive/Negative Words in Pop music") + 
+  xlab("Word") + ylab("Count") +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~sentiment, scales = "free_y") + 
+  scale_fill_manual(values=c("#0a0961","#ea6205"))+
+  scale_color_manual(values=c("#ea6205", "#0a0961")) + 
+  theme(plot.title = element_text(face = "bold", hjust = 0.5)) 
+```
+
+```{r}
+pop_word_df %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(max.words = 300, title.colors=c("#0a0961","#ea6205"),title.bg.colors=c("white","white"),  match.colors=TRUE)
+```
+
+
